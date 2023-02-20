@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
 #include <linux/bitops.h>
 #include <linux/err.h>
+#include <linux/ipc_logging.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -129,6 +131,16 @@ enum rpmh_regulator_reg_index {
 /* XOB voting registers are found in the VRM hardware module */
 #define CMD_DB_HW_XOB			CMD_DB_HW_VRM
 
+#define IPC_LOG_PAGES			10
+
+#define rpmh_reg_dbg(fmt, ...) \
+	do { \
+		ipc_log_string(rpmh_reg_ipc_log, fmt, ##__VA_ARGS__); \
+		pr_debug(fmt, ##__VA_ARGS__); \
+	} while (0)
+
+static void *rpmh_reg_ipc_log;
+
 /**
  * struct rpmh_regulator_request - rpmh request data
  * @reg:			Array of RPMh accelerator register values
@@ -204,6 +216,8 @@ struct rpmh_vreg;
  * @mode:			An array of modes supported by an RPMh VRM
  *				regulator resource.
  * @mode_count:			The number of entries in the mode array.
+ * @disable_pmic_mode:		PMIC mode optionally set when aggregated regulator resource
+ *				gets disabled, overriding existing aggregated mode.
  * @aggr_req_active:		Aggregated active set RPMh accelerator register
  *				request
  * @aggr_req_sleep:		Aggregated sleep set RPMh accelerator register
@@ -225,6 +239,7 @@ struct rpmh_aggr_vreg {
 	int				vreg_count;
 	struct rpmh_regulator_mode	*mode;
 	int				mode_count;
+	int				disable_pmic_mode;
 	struct rpmh_regulator_request	aggr_req_active;
 	struct rpmh_regulator_request	aggr_req_sleep;
 };
@@ -592,7 +607,7 @@ static void rpmh_regulator_req(struct rpmh_vreg *vreg,
 		}
 	}
 
-	pr_debug("%s\n", buf);
+	rpmh_reg_dbg("%s\n", buf);
 }
 
 /**
@@ -628,6 +643,20 @@ static void rpmh_regulator_handle_arc_enable(struct rpmh_aggr_vreg *aggr_vreg,
 	 * included in an RPMh command.
 	 */
 	req->valid &= ~BIT(RPMH_REGULATOR_REG_ARC_PSEUDO_ENABLE);
+}
+
+static void rpmh_regulator_handle_disable_mode(struct rpmh_aggr_vreg *aggr_vreg,
+					     struct rpmh_regulator_request *req)
+{
+	if (aggr_vreg->regulator_type != RPMH_REGULATOR_TYPE_VRM
+	   || aggr_vreg->disable_pmic_mode <= 0)
+		return;
+
+	if ((req->valid & BIT(RPMH_REGULATOR_REG_ENABLE))
+	   && !req->reg[RPMH_REGULATOR_REG_ENABLE]) {
+		req->reg[RPMH_REGULATOR_REG_VRM_MODE] = aggr_vreg->disable_pmic_mode;
+		req->valid |= RPMH_REGULATOR_REG_VRM_MODE;
+	}
 }
 
 /**
@@ -672,6 +701,8 @@ static void rpmh_regulator_aggregate_requests(struct rpmh_aggr_vreg *aggr_vreg,
 
 	rpmh_regulator_handle_arc_enable(aggr_vreg, req_active);
 	rpmh_regulator_handle_arc_enable(aggr_vreg, req_sleep);
+	rpmh_regulator_handle_disable_mode(aggr_vreg, req_active);
+	rpmh_regulator_handle_disable_mode(aggr_vreg, req_sleep);
 }
 
 /**
@@ -1340,9 +1371,10 @@ static int rpmh_regulator_parse_vrm_modes(struct rpmh_aggr_vreg *aggr_vreg)
 	const struct rpmh_regulator_mode *map;
 	const char *prop;
 	int i, len, rc;
-	u32 *buf;
+	u32 *buf, disable_mode;
 
 	aggr_vreg->regulator_hw_type = RPMH_REGULATOR_HW_TYPE_UNKNOWN;
+	aggr_vreg->disable_pmic_mode = -EINVAL;
 
 	/* qcom,regulator-type is optional */
 	prop = "qcom,regulator-type";
@@ -1387,6 +1419,23 @@ static int rpmh_regulator_parse_vrm_modes(struct rpmh_aggr_vreg *aggr_vreg)
 	}
 
 	map = rpmh_regulator_mode_map[aggr_vreg->regulator_hw_type];
+
+	prop = "qcom,disable-mode";
+	if (!of_property_read_u32(node, prop, &disable_mode)) {
+		if (disable_mode >= RPMH_REGULATOR_MODE_COUNT) {
+			aggr_vreg_err(aggr_vreg, "qcom,disable-mode value %u is invalid\n",
+				disable_mode);
+			return -EINVAL;
+		}
+
+		if (!map[disable_mode].framework_mode) {
+			aggr_vreg_err(aggr_vreg, "qcom,disable-mode value %u is invalid for regulator type = %s\n",
+				disable_mode, type);
+			return -EINVAL;
+		}
+
+		aggr_vreg->disable_pmic_mode = map[disable_mode].pmic_mode;
+	}
 
 	/* qcom,supported-modes is optional */
 	prop = "qcom,supported-modes";
@@ -1995,11 +2044,14 @@ static struct platform_driver rpmh_regulator_driver = {
 
 static int rpmh_regulator_init(void)
 {
+	rpmh_reg_ipc_log = ipc_log_context_create(IPC_LOG_PAGES, "rpmh_regulator", 0);
 	return platform_driver_register(&rpmh_regulator_driver);
 }
 
 static void rpmh_regulator_exit(void)
 {
+	if (rpmh_reg_ipc_log)
+		ipc_log_context_destroy(rpmh_reg_ipc_log);
 	platform_driver_unregister(&rpmh_regulator_driver);
 }
 

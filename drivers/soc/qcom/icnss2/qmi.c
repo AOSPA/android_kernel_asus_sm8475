@@ -1269,7 +1269,8 @@ int icnss_wlfw_qdss_data_send_sync(struct icnss_priv *priv, char *file_name,
 		     resp->total_size == total_size) &&
 		    (resp->seg_id_valid == 1 && resp->seg_id == req->seg_id) &&
 		    (resp->data_valid == 1 &&
-		     resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01)) {
+		     resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01) &&
+		    resp->data_len <= remaining) {
 			memcpy(p_qdss_trace_data_temp,
 			       resp->data, resp->data_len);
 		} else {
@@ -1464,6 +1465,13 @@ int wlfw_wlan_mode_send_sync_msg(struct icnss_priv *priv,
 	req->mode = mode;
 	req->hw_debug_valid = 1;
 	req->hw_debug = !!test_bit(HW_DEBUG_ENABLE, &priv->ctrl_params.quirks);
+
+	if (priv->wlan_en_delay_ms >= 100) {
+		icnss_pr_dbg("Setting WLAN_EN delay: %d ms\n",
+			     priv->wlan_en_delay_ms);
+		req->wlan_en_delay_valid = 1;
+		req->wlan_en_delay = priv->wlan_en_delay_ms;
+	}
 
 	priv->stats.mode_req++;
 

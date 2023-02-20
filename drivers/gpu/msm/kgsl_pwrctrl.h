@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __KGSL_PWRCTRL_H
 #define __KGSL_PWRCTRL_H
@@ -12,7 +12,7 @@
 /*****************************************************************************
  * power flags
  ****************************************************************************/
-#define KGSL_MAX_CLKS 18
+#define KGSL_MAX_CLKS 19
 
 #define KGSL_MAX_PWRLEVELS 16
 
@@ -87,6 +87,7 @@ struct kgsl_pwrlevel {
  * @default_pwrlevel - device wake up power level
  * @max_pwrlevel - maximum allowable powerlevel per the user
  * @min_pwrlevel - minimum allowable powerlevel per the user
+ * @min_render_pwrlevel - minimum allowable powerlevel for rendering
  * @num_pwrlevels - number of available power levels
  * @throttle_mask - LM throttle mask
  * @interval_timeout - timeout to be idle before a power event
@@ -127,9 +128,9 @@ struct kgsl_pwrctrl {
 	unsigned int thermal_pwrlevel;
 	unsigned int thermal_pwrlevel_floor;
 	unsigned int default_pwrlevel;
-	unsigned int wakeup_maxpwrlevel;
 	unsigned int max_pwrlevel;
 	unsigned int min_pwrlevel;
+	unsigned int min_render_pwrlevel;
 	unsigned int num_pwrlevels;
 	unsigned int throttle_mask;
 	u32 interval_timeout;
@@ -140,7 +141,6 @@ struct kgsl_pwrctrl {
 	unsigned int bus_percent_ab;
 	unsigned int bus_width;
 	unsigned long bus_ab_mbytes;
-	u32 ddr_stall_percent;
 	/** @ddr_table: List of the DDR bandwidths in KBps for the target */
 	u32 *ddr_table;
 	/** @ddr_table_count: Number of objects in @ddr_table */
@@ -169,6 +169,12 @@ struct kgsl_pwrctrl {
 	ktime_t last_stat_updated;
 	/** @nb_max: Notifier block for DEV_PM_QOS_MAX_FREQUENCY */
 	struct notifier_block nb_max;
+	/** @cur_dcvs_buslevel: Current bus level decided by bus DCVS */
+	u32 cur_dcvs_buslevel;
+	/** @rt_bus_hint: IB level hint for real time clients i.e. RB-0 */
+	u32 rt_bus_hint;
+	/** @rt_bus_hint_active: Boolean flag to indicate if RT bus hint is active */
+	bool rt_bus_hint_active;
 };
 
 int kgsl_pwrctrl_init(struct kgsl_device *device);
