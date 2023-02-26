@@ -369,8 +369,8 @@ static int icnss_stats_show_state(struct seq_file *s, struct icnss_priv *priv)
 		case ICNSS_PM_SUSPEND:
 			seq_puts(s, "PM SUSPEND");
 			continue;
-		case ICNSS_PM_SUSPEND_NOIRQ:
-			seq_puts(s, "PM SUSPEND NOIRQ");
+		case ICNSS_PM_SUSPEND_LATE:
+			seq_puts(s, "PM SUSPEND LATE");
 			continue;
 		case ICNSS_SSR_REGISTERED:
 			seq_puts(s, "SSR REGISTERED");
@@ -459,10 +459,10 @@ static int icnss_stats_show(struct seq_file *s, void *data)
 	ICNSS_STATS_DUMP(s, priv, pm_suspend_err);
 	ICNSS_STATS_DUMP(s, priv, pm_resume);
 	ICNSS_STATS_DUMP(s, priv, pm_resume_err);
-	ICNSS_STATS_DUMP(s, priv, pm_suspend_noirq);
-	ICNSS_STATS_DUMP(s, priv, pm_suspend_noirq_err);
-	ICNSS_STATS_DUMP(s, priv, pm_resume_noirq);
-	ICNSS_STATS_DUMP(s, priv, pm_resume_noirq_err);
+	ICNSS_STATS_DUMP(s, priv, pm_suspend_late);
+	ICNSS_STATS_DUMP(s, priv, pm_suspend_late_err);
+	ICNSS_STATS_DUMP(s, priv, pm_resume_early);
+	ICNSS_STATS_DUMP(s, priv, pm_resume_early_err);
 	ICNSS_STATS_DUMP(s, priv, pm_stay_awake);
 	ICNSS_STATS_DUMP(s, priv, pm_relax);
 
